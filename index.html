@@ -1080,7 +1080,7 @@
         await printMultiPagePDF(div);
     }
 
-    // دوال الأصول (مختصرة ولكن كاملة)
+    // دوال الأصول
     async function getAssets() { return await db.getAll('assets'); }
     async function addAsset(asset) { asset.createdAt = new Date().toISOString(); return await db.add('assets', asset); }
     async function updateAsset(id, data) { let ex = await db.get('assets', id); if (ex) { Object.assign(ex, data); await db.put('assets', ex); } }
@@ -1409,16 +1409,28 @@
             let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `watad_backup_${new Date().toISOString().slice(0,19)}.json`; a.click(); URL.revokeObjectURL(blob);
             showToast("تم التصدير");
         };
+        // ------------- إصلاح زر الاستيراد -------------
         document.getElementById('importDataBtn').onclick = () => {
             let inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
             inp.onchange = async e => {
-                let text = await e.target.files[0].text();
-                let data = JSON.parse(text);
-                for (let k of ['projects','purchases','sales','expenses','transport','projectExpenses','mirror_sales','mirror_purchases','mirror_costs','categories','employees','transactions','employee_monthly_notes','payments','assets','asset_transactions']) {
-                    if (data[k]) for (let it of data[k]) await db.put(k, it);
+                try {
+                    let text = await e.target.files[0].text();
+                    let data = JSON.parse(text);
+                    for (let k of ['projects','purchases','sales','expenses','transport','projectExpenses','mirror_sales','mirror_purchases','mirror_costs','categories','employees','transactions','employee_monthly_notes','payments','assets','asset_transactions']) {
+                        if (data[k] && Array.isArray(data[k])) {
+                            for (let it of data[k]) {
+                                delete it._id;
+                                delete it.id;
+                                await db.add(k, it);
+                            }
+                        }
+                    }
+                    await refreshAll();
+                    showToast("✅ تم الاستيراد بنجاح");
+                } catch (err) {
+                    console.error(err);
+                    showToast("❌ فشل الاستيراد: " + err.message);
                 }
-                await refreshAll();
-                showToast("تم الاستيراد");
             };
             inp.click();
         };

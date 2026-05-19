@@ -1411,29 +1411,78 @@
         };
         // ------------- إصلاح زر الاستيراد -------------
         document.getElementById('importDataBtn').onclick = () => {
-            let inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
-            inp.onchange = async e => {
-                try {
-                    let text = await e.target.files[0].text();
-                    let data = JSON.parse(text);
-                    for (let k of ['projects','purchases','sales','expenses','transport','projectExpenses','mirror_sales','mirror_purchases','mirror_costs','categories','employees','transactions','employee_monthly_notes','payments','assets','asset_transactions']) {
-                        if (data[k] && Array.isArray(data[k])) {
-                            for (let it of data[k]) {
-                                delete it._id;
-                                delete it.id;
-                                await db.add(k, it);
+    let inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'application/json';
+    inp.onchange = async e => {
+        try {
+            let text = await e.target.files[0].text();
+            let data = JSON.parse(text);
+            let counts = {};
+
+            // قائمة المجموعات التي نريد استيرادها
+            const stores = [
+                'projects', 'purchases', 'sales', 'expenses', 'transport',
+                'projectExpenses', 'mirror_sales', 'mirror_purchases', 'mirror_costs',
+                'categories', 'employees', 'transactions', 'employee_monthly_notes',
+                'payments', 'assets', 'asset_transactions'
+            ];
+
+            for (let store of stores) {
+                if (data[store] && Array.isArray(data[store])) {
+                    console.log(`بدء استيراد ${store}: ${data[store].length} عنصر`);
+                    let added = 0;
+                    for (let it of data[store]) {
+                        try {
+                            // 1. إزالة المعرفات القديمة
+                            delete it._id;
+                            delete it.__v;
+
+                            // 2. تحويل أي حقل يشبه المعرف (id, projectId, ...) إلى String
+                            if (it.id !== undefined) {
+                                it.id = String(it.id);
                             }
+                            if (it.projectId !== undefined) {
+                                it.projectId = String(it.projectId);
+                            }
+                            if (it.categoryId !== undefined) {
+                                it.categoryId = String(it.categoryId);
+                            }
+                            if (it.employeeId !== undefined) {
+                                it.employeeId = String(it.employeeId);
+                            }
+                            if (it.parentId !== undefined) {
+                                it.parentId = String(it.parentId);
+                            }
+                            if (it.assetId !== undefined) {
+                                it.assetId = String(it.assetId);
+                            }
+                            // تحويل أي حقل آخر قد يكون معرفاً (حسب الاسم)
+                            if (it.idNum) it.idNum = String(it.idNum);
+                            
+                            // 3. إضافة العنصر الجديد
+                            await db.add(store, it);
+                            added++;
+                        } catch (errItem) {
+                            console.error(`فشل إضافة عنصر في ${store}:`, it, errItem);
                         }
                     }
-                    await refreshAll();
-                    showToast("✅ تم الاستيراد بنجاح");
-                } catch (err) {
-                    console.error(err);
-                    showToast("❌ فشل الاستيراد: " + err.message);
+                    counts[store] = added;
+                    console.log(`تمت إضافة ${added} من ${data[store].length} في ${store}`);
                 }
-            };
-            inp.click();
-        };
+            }
+
+            await refreshAll();
+            let msg = `✅ تم الاستيراد بنجاح:\n` +
+                Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join('\n');
+            showToast(msg);
+        } catch (err) {
+            console.error(err);
+            showToast(`❌ فشل الاستيراد: ${err.message}\nراجع وحدة التحكم (F12) للتفاصيل.`);
+        }
+    };
+    inp.click();
+}; 
         // Sidebar toggle
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('sidebarToggleBtn');

@@ -254,7 +254,7 @@
 
 <script>
 (function() {
-    // -------------------- طبقة API ديناميكية (تستخدم نفس عنوان الخادم) --------------------
+    // -------------------- طبقة API ديناميكية --------------------
     const API_BASE = window.location.origin + '/api';
 
     class ServerAPI {
@@ -266,14 +266,12 @@
             }
             return item;
         }
-
         static async getAll(store) {
             const res = await fetch(`${API_BASE}/${store}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             return data.map(i => this.fixItem(i));
         }
-
         static async get(store, id) {
             const res = await fetch(`${API_BASE}/${store}/${id}`);
             if (res.status === 404) return undefined;
@@ -281,7 +279,6 @@
             const data = await res.json();
             return this.fixItem(data);
         }
-
         static async add(store, item) {
             const res = await fetch(`${API_BASE}/${store}`, {
                 method: 'POST',
@@ -292,7 +289,6 @@
             const saved = await res.json();
             return this.fixItem(saved);
         }
-
         static async put(store, item) {
             const id = item.id || item._id;
             const res = await fetch(`${API_BASE}/${store}/${id}`, {
@@ -304,13 +300,11 @@
             const updated = await res.json();
             return this.fixItem(updated);
         }
-
         static async delete(store, id) {
             const res = await fetch(`${API_BASE}/${store}/${id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return true;
         }
-
         static async getAllFromIndex(store, indexName, value) {
             let url = `${API_BASE}/${store}?`;
             if (indexName === 'categoryId') url += `categoryId=${value}`;
@@ -354,30 +348,47 @@
     let currentMirrorTab = "mirror_sales";
     let currentAssetTab = "assets_list";
 
-    // ------------------------ تهيئة البيانات ------------------------
-    async function initDB() {
-        await seedDefault();
-        await refreshAll();
+    // ------------------------ دوال مساعدة ------------------------
+    function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
+    function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+    function showModal(contentHTML) {
+        let modal = document.getElementById('genericModal');
+        if (!modal) {
+            modal = document.createElement('div'); modal.id = 'genericModal'; modal.className = 'modal';
+            modal.innerHTML = '<div class="modal-content" id="modalDynamicContent"></div>';
+            document.body.appendChild(modal);
+        }
+        let modalContent = document.getElementById('modalDynamicContent');
+        modalContent.innerHTML = contentHTML;
+        modal.style.display = 'flex';
+        let closeModal = () => { modal.style.display = 'none'; };
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        return { closeModal, modalContent };
+    }
+    async function printMultiPagePDF(containerDiv) {
+        const { jsPDF } = window.jspdf;
+        document.body.appendChild(containerDiv);
+        const canvas = await html2canvas(containerDiv, { scale: 2, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = 190;
+        const pageHeight = 277;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        while (heightLeft > 0) {
+            position = heightLeft - imgHeight;
+            doc.addPage();
+            doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+        }
+        doc.save(`report_${Date.now()}.pdf`);
+        document.body.removeChild(containerDiv);
     }
 
-    async function seedDefault() {
-        let cats = await db.getAll('categories');
-        if (cats.length === 0) {
-            await db.add('categories', { name: "تقنية المعلومات" });
-            await db.add('categories', { name: "المبيعات" });
-            await db.add('categories', { name: "الإدارة" });
-        }
-        let projs = await db.getAll('projects');
-        if (projs.length === 0) {
-            await db.add('projects', { name: "المشروع الرئيسي", createdAt: new Date().toISOString(), archived: false });
-        }
-        projs = await db.getAll('projects');
-        let activeProj = projs.find(p => !p.archived);
-        if (activeProj) currentProjectId = activeProj.id;
-        else if (projs.length) currentProjectId = projs[0].id;
-        updateProjectBadge();
-    }
-
+    // ------------------------ دوال المشاريع ------------------------
     async function getProjects(archived = false) {
         let all = await db.getAll('projects');
         return all.filter(p => p.archived === archived);
@@ -393,19 +404,25 @@
         if (proj) { proj.archived = false; await db.put('projects', proj); showToast("تم استرجاع المشروع"); await renderSidebarProjects(); await renderArchivedProjects(); if (!currentProjectId) { currentProjectId = id; updateProjectBadge(); } }
     }
     async function deleteProject(id) {
-        if (!confirm("⚠️ حذف المشروع بشكل نهائي؟ سيتم نقل العمليات المرتبطة إلى مشروع آخر.")) return;
-        let otherProjects = (await getProjects(false)).filter(p => p.id !== id);
-        if (otherProjects.length === 0) otherProjects = await getProjects(true);
-        if (otherProjects.length === 0) { showToast("لا يمكن حذف آخر مشروع"); return; }
-        let targetId = otherProjects[0].id;
+        if (!confirm(`⚠️ حذف المشروع بشكل نهائي؟ سيتم حذف جميع المشتريات والمبيعات والمصاريف وكل ما يتعلق بهذا المشروع. لا يمكن التراجع.`)) return;
         for (let store of ['purchases','sales','expenses','transport','projectExpenses']) {
             let items = await db.getAllFromIndex(store, 'projectId', id);
-            for (let item of items) { item.projectId = targetId; await db.put(store, item); }
+            for (let item of items) {
+                let payments = await db.getAllFromIndex('payments', 'parentId', item.id);
+                for (let p of payments) await db.delete('payments', p.id);
+                await db.delete(store, item.id);
+            }
         }
         await db.delete('projects', id);
-        if (currentProjectId === id) { currentProjectId = targetId; updateProjectBadge(); if (currentTab !== 'employees' && currentTab !== 'mirror' && currentTab !== 'assets') await renderAccountingSection(currentTab); }
+        if (currentProjectId === id) {
+            let active = (await getProjects(false))[0];
+            currentProjectId = active ? active.id : null;
+            updateProjectBadge();
+        }
         await renderSidebarProjects();
         await renderArchivedProjects();
+        if (currentTab !== 'employees' && currentTab !== 'mirror' && currentTab !== 'assets') await renderAccountingSection(currentTab);
+        showToast("تم حذف المشروع وجميع بياناته");
     }
 
     async function renderProjectList(containerId, archived) {
@@ -508,8 +525,8 @@
                 <hr><p><strong>📉 إجمالي المصاريف:</strong> ${totalExpenses.toFixed(2)} ر.س</p>
                 <p><strong>📈 صافي الربح (المبيعات - (المشتريات+المصاريف)):</strong> <span style="color:${profit>=0?'green':'red'}">${profit.toFixed(2)} ر.س</span></p>
             </div>
-            <h3>📋 تفاصيل المبيعات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${salesRows}</tbody></table>
-            <h3>📋 تفاصيل المشتريات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${purchasesRows}</tbody></table>
+            <h3>📋 تفاصيل المبيعات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${salesRows}</tbody></td>
+            <h3>📋 تفاصيل المشتريات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th><tr></thead><tbody>${purchasesRows}</tbody></table>
             <h3>📋 تفاصيل المصاريف العامة</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${generalRows}</tbody></table>
             <h3>📋 تفاصيل مصاريف النقل</h3><table border="1"><thead><tr><th>التاريخ</th><th>العميل</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${transportRows}</tbody></table>
             <h3>📋 تفاصيل مصاريف المشروع</h3><table border="1"><thead><tr><th>التاريخ</th><th>اسم المصروف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${projectExpRows}</tbody></table>
@@ -517,6 +534,7 @@
         await printMultiPagePDF(div);
     }
 
+    // ------------------------ دوال الموظفين والفئات ------------------------
     async function getCategories() { return await db.getAll('categories'); }
     async function getEmployeesByCategory(catId) { return await db.getAllFromIndex('employees', 'categoryId', catId); }
     async function getAllEmployees() { return await db.getAll('employees'); }
@@ -525,50 +543,15 @@
     async function deleteTransaction(id) { await db.delete('transactions', id); }
     async function deleteTransactionAndUpdateEmployee(txId, empId) { let tx = await db.get('transactions', txId); if (!tx) return false; let emp = await db.get('employees', empId); if (tx.type === 'advance' && emp) { emp.advanceBalance = (emp.advanceBalance||0) - tx.amount; await db.put('employees', emp); } await deleteTransaction(txId); return true; }
     async function hasSalaryTransferForMonth(empId, monthKey) { let all = await db.getAllFromIndex('transactions', 'employeeId', empId); return all.some(t=>t.type==='salary_transfer' && t.monthKey===monthKey); }
-    async function getEmployeeMonthlyNote(empId, monthKey) {
-        let items = await db.getAllFromIndex('employee_monthly_notes', 'employeeId_monthKey', [empId, monthKey]);
-        return items.length ? items[0].note : '';
-    }
-    async function saveEmployeeMonthlyNote(empId, monthKey, note) {
-        let existing = await db.getAllFromIndex('employee_monthly_notes', 'employeeId_monthKey', [empId, monthKey]);
-        if (existing.length) {
-            let noteObj = existing[0];
-            noteObj.note = note;
-            await db.put('employee_monthly_notes', noteObj);
-        } else {
-            await db.add('employee_monthly_notes', { employeeId: empId, monthKey, note });
-        }
-    }
-    async function addFinancialTransaction(emp, type, amount, reason, monthKey) {
-        if (isReadOnly) return false;
-        if ((type==='advance'||type==='deduction') && amount>emp.baseSalary) { showToast(`يتجاوز الراتب`); return false; }
-        if (await hasSalaryTransferForMonth(emp.id, monthKey) && type!=='bonus') { showToast(`تم تحويل الراتب مسبقاً`); return false; }
-        let tx = { employeeId: emp.id, type, amount, reason, date: new Date().toISOString(), monthKey };
-        await addTransaction(tx);
-        if (type==='advance') { emp.advanceBalance = (emp.advanceBalance||0)+amount; await db.put('employees', emp); }
-        showToast(`تمت إضافة ${type}`);
-        return true;
-    }
-    async function autoSalaryTransfer(emp, monthKey) {
-        if (isReadOnly) return false;
-        if (await hasSalaryTransferForMonth(emp.id, monthKey)) { showToast(`تم التحويل مسبقاً`); return false; }
-        let txs = await getTransactions(emp.id, monthKey);
-        let adv = txs.filter(t=>t.type==='advance').reduce((s,t)=>s+t.amount,0);
-        let ded = txs.filter(t=>t.type==='deduction').reduce((s,t)=>s+t.amount,0);
-        let net = emp.baseSalary - ded - adv;
-        if (net <= 0) { showToast(`صافي الراتب صفر`); return false; }
-        if (confirm(`الشهر: ${monthKey}\nالصافي: ${net}\nتحويل؟`)) {
-            await addTransaction({employeeId:emp.id, type:'salary_transfer', amount:net, reason:`راتب ${monthKey}`, date:new Date().toISOString(), monthKey });
-            showToast(`تم تحويل ${net}`);
-            return true;
-        }
-        return false;
-    }
+    async function getEmployeeMonthlyNote(empId, monthKey) { let items = await db.getAllFromIndex('employee_monthly_notes', 'employeeId_monthKey', [empId, monthKey]); return items.length ? items[0].note : ''; }
+    async function saveEmployeeMonthlyNote(empId, monthKey, note) { let existing = await db.getAllFromIndex('employee_monthly_notes', 'employeeId_monthKey', [empId, monthKey]); if (existing.length) { let noteObj = existing[0]; noteObj.note = note; await db.put('employee_monthly_notes', noteObj); } else { await db.add('employee_monthly_notes', { employeeId: empId, monthKey, note }); } }
+    async function addFinancialTransaction(emp, type, amount, reason, monthKey) { if (isReadOnly) return false; if ((type==='advance'||type==='deduction') && amount>emp.baseSalary) { showToast(`يتجاوز الراتب`); return false; } if (await hasSalaryTransferForMonth(emp.id, monthKey) && type!=='bonus') { showToast(`تم تحويل الراتب مسبقاً`); return false; } let tx = { employeeId: emp.id, type, amount, reason, date: new Date().toISOString(), monthKey }; await addTransaction(tx); if (type==='advance') { emp.advanceBalance = (emp.advanceBalance||0)+amount; await db.put('employees', emp); } showToast(`تمت إضافة ${type}`); return true; }
+    async function autoSalaryTransfer(emp, monthKey) { if (isReadOnly) return false; if (await hasSalaryTransferForMonth(emp.id, monthKey)) { showToast(`تم التحويل مسبقاً`); return false; } let txs = await getTransactions(emp.id, monthKey); let adv = txs.filter(t=>t.type==='advance').reduce((s,t)=>s+t.amount,0); let ded = txs.filter(t=>t.type==='deduction').reduce((s,t)=>s+t.amount,0); let net = emp.baseSalary - ded - adv; if (net <= 0) { showToast(`صافي الراتب صفر`); return false; } if (confirm(`الشهر: ${monthKey}\nالصافي: ${net}\nتحويل؟`)) { await addTransaction({employeeId:emp.id, type:'salary_transfer', amount:net, reason:`راتب ${monthKey}`, date:new Date().toISOString(), monthKey }); showToast(`تم تحويل ${net}`); return true; } return false; }
     async function showTransactionLog(emp) {
         let txs = await getTransactions(emp.id);
         txs.sort((a,b)=>new Date(b.date)-new Date(a.date));
         let rows = txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.monthKey}</td><td style="padding:8px">${t.type==='advance'?'سلفة':t.type==='deduction'?'خصم':t.type==='bonus'?'مكافأة':'تحويل'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.reason||'')}</td><td style="padding:8px"><button class="btn-small del-tx-btn" data-id="${t.id}">حذف</button></td></tr>`).join('');
-        let html = `<h3>سجل معاملات ${emp.fullName}</h3><table border="1"><thead><tr><th>التاريخ</th><th>الشهر</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>حذف</th></tr></thead><tbody>${rows}</tbody></table><button id="closeLogBtn">إغلاق</button>`;
+        let html = `<h3>سجل معاملات ${emp.fullName}</h3><table border="1"><thead><tr><th>التاريخ</th><th>الشهر</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>حذف</th><tr></thead><tbody>${rows}</tbody><table><button id="closeLogBtn">إغلاق</button>`;
         let { closeModal, modalContent } = showModal(html);
         modalContent.querySelectorAll('.del-tx-btn').forEach(btn=>{ btn.onclick = async () => { let id = parseInt(btn.dataset.id); if (confirm("حذف المعاملة؟")) { await deleteTransactionAndUpdateEmployee(id, emp.id); closeModal(); await renderEmployees(); showToast("تم الحذف"); } }; });
         modalContent.querySelector('#closeLogBtn').onclick = closeModal;
@@ -764,30 +747,7 @@
         await printMultiPagePDF(div);
     }
 
-    async function printMultiPagePDF(containerDiv) {
-        const { jsPDF } = window.jspdf;
-        document.body.appendChild(containerDiv);
-        const canvas = await html2canvas(containerDiv, { scale: 2, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/png');
-        const imgWidth = 190;
-        const pageHeight = 277;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        let heightLeft = imgHeight;
-        let position = 0;
-        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-        doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-        while (heightLeft > 0) {
-            position = heightLeft - imgHeight;
-            doc.addPage();
-            doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-        }
-        doc.save(`report_${Date.now()}.pdf`);
-        document.body.removeChild(containerDiv);
-    }
-
-    // ------------------------ دوال المحاسبة مع الدفعات ------------------------
+    // ------------------------ دوال المحاسبة الأساسية ------------------------
     async function addPayment(parentId, type, amount, date, note) {
         let pay = { parentId, type, amount, date: date || new Date().toISOString(), note, createdAt: new Date().toISOString() };
         await db.add('payments', pay);
@@ -817,55 +777,26 @@
             await db.put(type, invoice);
         }
     }
-    
     async function showPaymentManager(parentId, type, desc) {
         try {
             let payments = await getPayments(parentId);
             let invoice = await db.get(type, parentId);
-            if (!invoice) {
-                showToast("لم يتم العثور على الفاتورة");
-                return;
-            }
+            if (!invoice) { showToast("لم يتم العثور على الفاتورة"); return; }
             let html = `<h3>إدارة الدفعات والمبالغ الإضافية - ${desc}</h3>
                 <p><strong>المبلغ الكامل الحالي:</strong> ${invoice.totalAmount} ر.س</p>
                 <p><strong>المدفوع حالياً:</strong> ${invoice.paidAmount} ر.س</p>
                 <p><strong>المتبقي:</strong> ${invoice.totalAmount - invoice.paidAmount} ر.س</p>
-                <table border="1" style="width:100%; border-collapse:collapse;"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th>حذف</th></tr></thead><tbody>${payments.map(p=>`<tr><td style="padding:8px">${new Date(p.date).toLocaleDateString()}</td><td style="padding:8px">${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td style="padding:8px">${p.amount}</td><td style="padding:8px">${escapeHtml(p.note||'')}</td><td style="padding:8px"><button class="btn-small del-pay" data-id="${p.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr>
-                <label>دفعة جديدة (تخفض المتبقي):</label><input type="number" id="newAmount" placeholder="المبلغ"><input type="date" id="newDate"><textarea id="newNote" placeholder="ملاحظة"></textarea><button id="addPayBtn" class="btn">إضافة دفعة</button>
-                <hr><label>مبلغ إضافي (يزيد إجمالي الفاتورة):</label><input type="number" id="extraAmount" placeholder="المبلغ الإضافي"><input type="date" id="extraDate"><textarea id="extraNote" placeholder="سبب الإضافة"></textarea><button id="addExtraBtn" class="btn">إضافة مبلغ إضافي</button>
+                <table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th>حذف</th></td></thead><tbody>${payments.map(p=>`<tr><td>${new Date(p.date).toLocaleDateString()}</td><td>${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td>${p.amount}</td><td>${escapeHtml(p.note||'')}</td><td><button class="btn-small del-pay" data-id="${p.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr>
+                <label>دفعة جديدة (تخفض المتبقي):</label><input type="number" id="newAmount"><input type="date" id="newDate"><textarea id="newNote"></textarea><button id="addPayBtn" class="btn">إضافة دفعة</button>
+                <hr><label>مبلغ إضافي (يزيد إجمالي الفاتورة):</label><input type="number" id="extraAmount"><input type="date" id="extraDate"><textarea id="extraNote"></textarea><button id="addExtraBtn" class="btn">إضافة مبلغ إضافي</button>
                 <button id="closePayBtn" class="btn">إغلاق</button>`;
             let { closeModal, modalContent } = showModal(html);
-            modalContent.querySelector('#addPayBtn').onclick = async () => {
-                let amount = parseFloat(modalContent.querySelector('#newAmount').value);
-                if (isNaN(amount) || amount<=0) { showToast("مبلغ صالح"); return; }
-                let date = modalContent.querySelector('#newDate').value;
-                let note = modalContent.querySelector('#newNote').value;
-                await addPayment(parentId, type, amount, date, note);
-                closeModal(); showToast("تمت إضافة الدفعة");
-                if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases');
-            };
-            modalContent.querySelector('#addExtraBtn').onclick = async () => {
-                let amount = parseFloat(modalContent.querySelector('#extraAmount').value);
-                if (isNaN(amount) || amount<=0) { showToast("مبلغ صالح"); return; }
-                let date = modalContent.querySelector('#extraDate').value;
-                let note = modalContent.querySelector('#extraNote').value;
-                await addAdditionalAmount(parentId, type, amount, date, note);
-                closeModal();
-                if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases');
-            };
-            modalContent.querySelectorAll('.del-pay').forEach(btn => {
-                btn.onclick = async () => {
-                    let id = btn.dataset.id;
-                    if (confirm("حذف هذه العملية؟")) { await deletePayment(id, parentId, type); closeModal(); showToast("تم الحذف"); if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases'); }
-                };
-            });
+            modalContent.querySelector('#addPayBtn').onclick = async () => { let amount = parseFloat(modalContent.querySelector('#newAmount').value); if (isNaN(amount)||amount<=0){ showToast("مبلغ صالح"); return; } let date = modalContent.querySelector('#newDate').value; let note = modalContent.querySelector('#newNote').value; await addPayment(parentId, type, amount, date, note); closeModal(); showToast("تمت إضافة الدفعة"); if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases'); };
+            modalContent.querySelector('#addExtraBtn').onclick = async () => { let amount = parseFloat(modalContent.querySelector('#extraAmount').value); if (isNaN(amount)||amount<=0){ showToast("مبلغ صالح"); return; } let date = modalContent.querySelector('#extraDate').value; let note = modalContent.querySelector('#extraNote').value; await addAdditionalAmount(parentId, type, amount, date, note); closeModal(); if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases'); };
+            modalContent.querySelectorAll('.del-pay').forEach(btn => { btn.onclick = async () => { let id = btn.dataset.id; if (confirm("حذف هذه العملية؟")) { await deletePayment(id, parentId, type); closeModal(); showToast("تم الحذف"); if (type === 'sales') await renderAccountingSection('sales'); else await renderAccountingSection('purchases'); } }; });
             modalContent.querySelector('#closePayBtn').onclick = closeModal;
-        } catch (err) {
-            console.error(err);
-            showToast("حدث خطأ أثناء فتح نافذة الدفعات");
-        }
+        } catch(err) { console.error(err); showToast("حدث خطأ أثناء فتح نافذة الدفعات"); }
     }
-
     async function generateInvoiceReport(entry, type) {
         let payments = await getPayments(entry.id);
         let div = document.createElement('div');
@@ -873,10 +804,9 @@
         div.innerHTML = `<h2>${type==='sales'?'فاتورة مبيعات':'فاتورة مشتريات'}</h2>
             <p>التاريخ: ${new Date(entry.date).toLocaleDateString()}</p><p>الوصف: ${escapeHtml(entry.description||'')}</p>
             <p>المبلغ الكامل: ${entry.totalAmount}</p><p>المدفوع: ${entry.paidAmount}</p><p>المتبقي: ${entry.totalAmount - entry.paidAmount}</p>
-            <h3>سجل الدفعات والمبالغ الإضافية</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th></tr></thead><tbody>${payments.map(p=>`<tr><td style="padding:8px">${new Date(p.date).toLocaleDateString()}</td><td style="padding:8px">${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td style="padding:8px">${p.amount}</td><td style="padding:8px">${escapeHtml(p.note||'')}</td></tr>`).join('')}</tbody></table>`;
+            <h3>سجل الدفعات والمبالغ الإضافية</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th></tr></thead><tbody>${payments.map(p=>`<tr><td>${new Date(p.date).toLocaleDateString()}</td><td>${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td>${p.amount}</td><td>${escapeHtml(p.note||'')}</td></tr>`).join('')}</tbody></table>`;
         await printMultiPagePDF(div);
     }
-
     async function addAccountingEntry(store, data) {
         if (store !== 'mirror_sales' && store !== 'mirror_purchases' && store !== 'mirror_costs' && !currentProjectId) { showToast("اختر مشروعاً أولاً"); return; }
         if (store !== 'mirror_sales' && store !== 'mirror_purchases' && store !== 'mirror_costs') data.projectId = currentProjectId;
@@ -1046,12 +976,12 @@
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
         let total = entries.reduce((s,e)=>s+(e.totalAmount||e.amount),0);
-        let rows = entries.map(e=>`<tr><td style="padding:8px">${new Date(e.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(e.description||e.customerName||e.projectName||'')}</td><td style="padding:8px">${escapeHtml(e.category||'')}</td><td style="padding:8px">${e.totalAmount||e.amount}</td><td style="padding:8px">${e.paidAmount||0}</td><td style="padding:8px">${(e.totalAmount||e.amount)-(e.paidAmount||0)}</td><td style="padding:8px">${escapeHtml(e.details||'')}</td></tr>`).join('');
+        let rows = entries.map(e=>`<td><td>${new Date(e.date).toLocaleDateString()}</td><td>${escapeHtml(e.description||e.customerName||e.projectName||'')}</td><td>${escapeHtml(e.category||'')}</td><td>${e.totalAmount||e.amount}</td><td>${e.paidAmount||0}</td><td>${(e.totalAmount||e.amount)-(e.paidAmount||0)}</td><td>${escapeHtml(e.details||'')}</td></table>`).join('');
         div.innerHTML = `<h2>${name} - ${section}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></table>`;
         await printMultiPagePDF(div);
     }
 
-    // ------------------------ دوال المرايا والأصول ------------------------
+    // ------------------------ دوال المرايا ------------------------
     async function renderMirrorSection(store, containerId, titlePrefix) {
         let container = document.getElementById(containerId);
         if (!container) return;
@@ -1075,28 +1005,18 @@
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
         let total = entries.reduce((s,e)=>s+e.amount,0);
-        let rows = entries.map(e=>`<tr><td style="padding:8px">${new Date(e.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(e.description||'')}</td><td style="padding:8px">${e.amount}</td><td style="padding:8px">${escapeHtml(e.details||'')}</td></tr>`).join('');
-        div.innerHTML = `<h2>تقرير ${title}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></table>`;
+        let rows = entries.map(e=>`<td><td>${new Date(e.date).toLocaleDateString()}</td><td>${escapeHtml(e.description||'')}</td><td>${e.amount}</td><td>${escapeHtml(e.details||'')}</td></tr>`).join('');
+        div.innerHTML = `<h2>تقرير ${title}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></td>`;
         await printMultiPagePDF(div);
     }
 
-    // دوال الأصول
+    // ------------------------ دوال الأصول ------------------------
     async function getAssets() { return await db.getAll('assets'); }
     async function addAsset(asset) { asset.createdAt = new Date().toISOString(); return await db.add('assets', asset); }
     async function updateAsset(id, data) { let ex = await db.get('assets', id); if (ex) { Object.assign(ex, data); await db.put('assets', ex); } }
-    async function deleteAsset(id) {
-        let txs = await db.getAllFromIndex('asset_transactions', 'assetId', id);
-        for (let tx of txs) await db.delete('asset_transactions', tx.id);
-        await db.delete('assets', id);
-    }
-    async function addAssetTransaction(assetId, type, amount, date, desc) {
-        return await db.add('asset_transactions', { assetId, type, amount, date, description: desc, monthKey: date.slice(0,7), createdAt: new Date().toISOString() });
-    }
-    async function getAssetTransactions(assetId, monthKey=null) {
-        let all = await db.getAllFromIndex('asset_transactions', 'assetId', assetId);
-        if (monthKey) return all.filter(t=>t.monthKey===monthKey);
-        return all;
-    }
+    async function deleteAsset(id) { let txs = await db.getAllFromIndex('asset_transactions', 'assetId', id); for (let tx of txs) await db.delete('asset_transactions', tx.id); await db.delete('assets', id); }
+    async function addAssetTransaction(assetId, type, amount, date, desc) { return await db.add('asset_transactions', { assetId, type, amount, date, description: desc, monthKey: date.slice(0,7), createdAt: new Date().toISOString() }); }
+    async function getAssetTransactions(assetId, monthKey=null) { let all = await db.getAllFromIndex('asset_transactions', 'assetId', assetId); if (monthKey) return all.filter(t=>t.monthKey===monthKey); return all; }
     async function deleteAssetTransaction(txId) { await db.delete('asset_transactions', txId); }
     async function renderAssetsList() {
         let assets = await getAssets();
@@ -1116,42 +1036,16 @@
     }
     async function showAssetTransactionManager(asset) {
         let txs = await getAssetTransactions(asset.id);
-        let html = `<h3>معاملات الأصل: ${asset.name}</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th><th>حذف</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td><td style="padding:8px"><button class="btn-small del-asset-tx" data-id="${t.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr><h4>إضافة معاملة</h4><label>النوع:</label><select id="type"><option value="income">إيراد (إيجار)</option><option value="expense">مصروف (صيانة)</option></select><label>التاريخ:</label><input type="date" id="date"><label>المبلغ:</label><input type="number" id="amount"><label>الوصف:</label><textarea id="desc"></textarea><button id="addTxBtn" class="btn">إضافة</button><button id="closeTxBtn" class="btn">إغلاق</button>`;
+        let html = `<h3>معاملات الأصل: ${asset.name}</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th><th>حذف</th></tr></thead><tbody>${txs.map(t=>`<td><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td><td><button class="btn-small del-asset-tx" data-id="${t.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr><h4>إضافة معاملة</h4><label>النوع:</label><select id="type"><option value="income">إيراد (إيجار)</option><option value="expense">مصروف (صيانة)</option></select><label>التاريخ:</label><input type="date" id="date"><label>المبلغ:</label><input type="number" id="amount"><label>الوصف:</label><textarea id="desc"></textarea><button id="addTxBtn" class="btn">إضافة</button><button id="closeTxBtn" class="btn">إغلاق</button>`;
         let { closeModal, modalContent } = showModal(html);
-        modalContent.querySelector('#addTxBtn').onclick = async () => {
-            let type = modalContent.querySelector('#type').value;
-            let date = modalContent.querySelector('#date').value;
-            let amount = parseFloat(modalContent.querySelector('#amount').value);
-            let desc = modalContent.querySelector('#desc').value;
-            if (!date || isNaN(amount) || amount<=0) { showToast("بيانات غير صحيحة"); return; }
-            await addAssetTransaction(asset.id, type, amount, date, desc);
-            closeModal();
-            showToast("تمت الإضافة");
-            renderAssetsList();
-        };
-        modalContent.querySelectorAll('.del-asset-tx').forEach(btn => {
-            btn.onclick = async () => { if (confirm("حذف المعاملة؟")) { await deleteAssetTransaction(btn.dataset.id); closeModal(); renderAssetsList(); showToast("تم الحذف"); } };
-        });
+        modalContent.querySelector('#addTxBtn').onclick = async () => { let type = modalContent.querySelector('#type').value; let date = modalContent.querySelector('#date').value; let amount = parseFloat(modalContent.querySelector('#amount').value); let desc = modalContent.querySelector('#desc').value; if (!date || isNaN(amount) || amount<=0) { showToast("بيانات غير صحيحة"); return; } await addAssetTransaction(asset.id, type, amount, date, desc); closeModal(); showToast("تمت الإضافة"); renderAssetsList(); };
+        modalContent.querySelectorAll('.del-asset-tx').forEach(btn => { btn.onclick = async () => { if (confirm("حذف المعاملة؟")) { await deleteAssetTransaction(btn.dataset.id); closeModal(); renderAssetsList(); showToast("تم الحذف"); } }; });
         modalContent.querySelector('#closeTxBtn').onclick = closeModal;
     }
     function showEditAssetForm(asset) {
         let html = `<h3>تعديل الأصل</h3><label>الاسم:</label><input id="name" value="${escapeHtml(asset.name)}"><label>النوع:</label><input id="type" value="${escapeHtml(asset.type||'')}"><label>الرقم التسلسلي:</label><input id="serial" value="${escapeHtml(asset.serial||'')}"><label>المستلم:</label><input id="receiver" value="${escapeHtml(asset.receiver||'')}"><label>تاريخ الشراء:</label><input type="date" id="pDate" value="${asset.purchaseDate||''}"><label>قيمة الشراء:</label><input type="number" id="pValue" step="0.01" value="${asset.purchaseValue||0}"><label>ملاحظات:</label><textarea id="notes">${escapeHtml(asset.notes||'')}</textarea><button id="save" class="btn">حفظ</button>`;
         let { closeModal, modalContent } = showModal(html);
-        modalContent.querySelector('#save').onclick = async () => {
-            let updated = {
-                name: modalContent.querySelector('#name').value,
-                type: modalContent.querySelector('#type').value,
-                serial: modalContent.querySelector('#serial').value,
-                receiver: modalContent.querySelector('#receiver').value,
-                purchaseDate: modalContent.querySelector('#pDate').value,
-                purchaseValue: parseFloat(modalContent.querySelector('#pValue').value),
-                notes: modalContent.querySelector('#notes').value
-            };
-            await updateAsset(asset.id, updated);
-            closeModal();
-            renderAssetsList();
-            showToast("تم التحديث");
-        };
+        modalContent.querySelector('#save').onclick = async () => { let updated = { name: modalContent.querySelector('#name').value, type: modalContent.querySelector('#type').value, serial: modalContent.querySelector('#serial').value, receiver: modalContent.querySelector('#receiver').value, purchaseDate: modalContent.querySelector('#pDate').value, purchaseValue: parseFloat(modalContent.querySelector('#pValue').value), notes: modalContent.querySelector('#notes').value }; await updateAsset(asset.id, updated); closeModal(); renderAssetsList(); showToast("تم التحديث"); };
     }
     async function generateAssetReport(assetId, assetName) {
         let asset = await db.get('assets', assetId);
@@ -1162,7 +1056,7 @@
         let net = totalIncome - totalExpense;
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
-        div.innerHTML = `<h2>تقرير الأصل: ${escapeHtml(asset.name)}</h2><p>النوع: ${escapeHtml(asset.type||'')}</p><p>الرقم: ${escapeHtml(asset.serial||'')}</p><p>المستلم: ${escapeHtml(asset.receiver||'')}</p><p>تاريخ الشراء: ${asset.purchaseDate||''}</p><p>قيمة الشراء: ${asset.purchaseValue||0}</p><h3>المعاملات</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table><p>إجمالي الإيرادات: ${totalIncome}</p><p>إجمالي المصروفات: ${totalExpense}</p><p>صافي الربح من الأصل: ${net}</p>`;
+        div.innerHTML = `<h2>تقرير الأصل: ${escapeHtml(asset.name)}</h2><p>النوع: ${escapeHtml(asset.type||'')}</p><p>الرقم: ${escapeHtml(asset.serial||'')}</p><p>المستلم: ${escapeHtml(asset.receiver||'')}</p><p>تاريخ الشراء: ${asset.purchaseDate||''}</p><p>قيمة الشراء: ${asset.purchaseValue||0}</p><h3>المعاملات</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></td><p>إجمالي الإيرادات: ${totalIncome}</p><p>إجمالي المصروفات: ${totalExpense}</p><p>صافي الربح من الأصل: ${net}</p>`;
         await printMultiPagePDF(div);
     }
     async function generateAllAssetsMonthlyReport(monthKey) {
@@ -1174,7 +1068,7 @@
             let txs = await getAssetTransactions(a.id, monthKey);
             let inc = txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
             let exp = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-            content += `<div style="margin-top:20px;"><h3>${escapeHtml(a.name)}</h3><p>الإيرادات: ${inc} | المصروفات: ${exp} | الصافي: ${inc-exp}</p><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table></div>`;
+            content += `<div style="margin-top:20px;"><h3>${escapeHtml(a.name)}</h3><p>الإيرادات: ${inc} | المصروفات: ${exp} | الصافي: ${inc-exp}</p><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table></div>`;
         }
         if (assets.length===0) content += '<p>لا توجد أصول</p>';
         div.innerHTML = content;
@@ -1182,6 +1076,27 @@
     }
 
     // ------------------------ دوال عامة ------------------------
+    async function initDB() {
+        await seedDefault();
+        await refreshAll();
+    }
+    async function seedDefault() {
+        let cats = await db.getAll('categories');
+        if (cats.length === 0) {
+            await db.add('categories', { name: "تقنية المعلومات" });
+            await db.add('categories', { name: "المبيعات" });
+            await db.add('categories', { name: "الإدارة" });
+        }
+        let projs = await db.getAll('projects');
+        if (projs.length === 0) {
+            await db.add('projects', { name: "المشروع الرئيسي", createdAt: new Date().toISOString(), archived: false });
+        }
+        projs = await db.getAll('projects');
+        let activeProj = projs.find(p => !p.archived);
+        if (activeProj) currentProjectId = activeProj.id;
+        else if (projs.length) currentProjectId = projs[0].id;
+        updateProjectBadge();
+    }
     async function updateDashboardStats() {
         let emps = await getAllEmployees();
         document.getElementById('totalEmployees').innerText = emps.length;
@@ -1217,24 +1132,8 @@
             await renderMirrorSection('mirror_costs', 'mirrorCostsList', 'تكاليف مرايا');
         } else if (currentTab !== 'employees') await renderAccountingSection(currentTab);
     }
-    function showModal(contentHTML) {
-        let modal = document.getElementById('genericModal');
-        if (!modal) {
-            modal = document.createElement('div'); modal.id = 'genericModal'; modal.className = 'modal';
-            modal.innerHTML = '<div class="modal-content" id="modalDynamicContent"></div>';
-            document.body.appendChild(modal);
-        }
-        let modalContent = document.getElementById('modalDynamicContent');
-        modalContent.innerHTML = contentHTML;
-        modal.style.display = 'flex';
-        let closeModal = () => { modal.style.display = 'none'; };
-        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-        return { closeModal, modalContent };
-    }
-    function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
-    function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
 
-    // ------------------------ دوال فئات الموظفين ------------------------
+    // ------------------------ دوال فئات الموظفين (مع زر الحذف) ------------------------
     async function renderSidebarCategories() {
         let cats = await getCategories();
         let container = document.getElementById('categoriesList');
@@ -1243,24 +1142,15 @@
         for (let cat of cats) {
             let div = document.createElement('div');
             div.className = `category-item ${currentCategoryId === cat.id ? 'active' : ''}`;
-            div.innerHTML = `<span>${escapeHtml(cat.name)}</span><div><button class="editCatBtn" data-id="${cat.id}"><i class="fas fa-edit"></i></button></div>`;
+            div.innerHTML = `<span>${escapeHtml(cat.name)}</span><div><button class="editCatBtn" data-id="${cat.id}"><i class="fas fa-edit"></i></button> <button class="deleteCatBtn" data-id="${cat.id}" data-name="${escapeHtml(cat.name)}"><i class="fas fa-trash"></i></button></div>`;
             div.addEventListener('click', () => { currentCategoryId = cat.id; renderEmployees(); renderSidebarCategories(); });
             div.querySelector('.editCatBtn')?.addEventListener('click', (e) => { e.stopPropagation(); editCategory(cat); });
+            div.querySelector('.deleteCatBtn')?.addEventListener('click', async (e) => { e.stopPropagation(); if (confirm(`⚠️ حذف الفئة "${cat.name}"؟ سيتم نقل جميع الموظفين التابعين لها إلى فئة "بدون فئة".`)) { let defaultCat = cats.find(c=>c.name==="بدون فئة"); if (!defaultCat) defaultCat = await db.add('categories', { name: "بدون فئة" }); let employees = await getEmployeesByCategory(cat.id); for (let emp of employees) { emp.categoryId = defaultCat.id; await db.put('employees', emp); } await db.delete('categories', cat.id); if (currentCategoryId === cat.id) currentCategoryId = defaultCat.id; await renderSidebarCategories(); await renderEmployees(); showToast(`تم حذف الفئة ونقل الموظفين إلى "بدون فئة"`); } });
             container.appendChild(div);
         }
+        if (cats.length === 0) container.innerHTML = '<div class="category-item">لا توجد فئات</div>';
     }
-    async function editCategory(cat) {
-        if (isReadOnly) return;
-        let html = `<input id="catName" value="${escapeHtml(cat.name)}"><button id="save" class="btn">حفظ</button>`;
-        let { closeModal, modalContent } = showModal(html);
-        modalContent.querySelector('#save').onclick = async () => {
-            cat.name = modalContent.querySelector('#catName').value;
-            await db.put('categories', cat);
-            await renderSidebarCategories();
-            closeModal();
-            showToast("تم التعديل");
-        };
-    }
+    async function editCategory(cat) { if (isReadOnly) return; let html = `<input id="catName" value="${escapeHtml(cat.name)}"><button id="save" class="btn">حفظ</button>`; let { closeModal, modalContent } = showModal(html); modalContent.querySelector('#save').onclick = async () => { cat.name = modalContent.querySelector('#catName').value; await db.put('categories', cat); await renderSidebarCategories(); closeModal(); showToast("تم التعديل"); }; }
     async function renderEmployees() {
         if (!currentCategoryId) return;
         let employees = await getEmployeesByCategory(currentCategoryId);
@@ -1282,7 +1172,7 @@
         if (filtered.length === 0) container.innerHTML = '<div class="card">لا يوجد موظفون</div>';
     }
 
-    // ------------------------ ربط الأحداث ------------------------
+    // ------------------------ ربط الأحداث وبدء التطبيق ------------------------
     function bindEvents() {
         document.getElementById('darkModeToggle').onclick = () => document.body.classList.toggle('dark');
         document.getElementById('addProjectBtn').onclick = async () => { let n = prompt("اسم المشروع"); if (n) { await addProject(n); await renderSidebarProjects(); await renderArchivedProjects(); showToast("تمت الإضافة"); } };
@@ -1308,205 +1198,37 @@
         document.getElementById('reportMirrorSaleBtn').onclick = () => generateMirrorPDF('mirror_sales', 'مبيعات المرايا');
         document.getElementById('reportMirrorPurchaseBtn').onclick = () => generateMirrorPDF('mirror_purchases', 'مشتريات المرايا');
         document.getElementById('reportMirrorCostBtn').onclick = () => generateMirrorPDF('mirror_costs', 'تكاليف المرايا');
-        document.getElementById('addAssetBtn').onclick = () => {
-            let html = `<h3>إضافة أصل جديد</h3><label>الاسم:</label><input id="name"><label>النوع:</label><input id="type"><label>الرقم التسلسلي:</label><input id="serial"><label>المستلم:</label><input id="receiver"><label>تاريخ الشراء:</label><input type="date" id="pDate"><label>قيمة الشراء:</label><input type="number" id="pValue"><label>ملاحظات:</label><textarea id="notes"></textarea><button id="saveAsset" class="btn">حفظ</button>`;
-            let { closeModal, modalContent } = showModal(html);
-            modalContent.querySelector('#saveAsset').onclick = async () => {
-                let asset = {
-                    name: modalContent.querySelector('#name').value,
-                    type: modalContent.querySelector('#type').value,
-                    serial: modalContent.querySelector('#serial').value,
-                    receiver: modalContent.querySelector('#receiver').value,
-                    purchaseDate: modalContent.querySelector('#pDate').value,
-                    purchaseValue: parseFloat(modalContent.querySelector('#pValue').value) || 0,
-                    notes: modalContent.querySelector('#notes').value
-                };
-                if (!asset.name) { showToast("الاسم مطلوب"); return; }
-                await addAsset(asset);
-                closeModal();
-                renderAssetsList();
-                showToast("تمت الإضافة");
-            };
-        };
-        document.getElementById('generateAllAssetsReportBtn').onclick = async () => {
-            let month = document.getElementById('assetReportMonth').value;
-            if (!month) { showToast("اختر الشهر"); return; }
-            await generateAllAssetsMonthlyReport(month);
-        };
+        document.getElementById('addAssetBtn').onclick = () => { let html = `<h3>إضافة أصل جديد</h3><label>الاسم:</label><input id="name"><label>النوع:</label><input id="type"><label>الرقم التسلسلي:</label><input id="serial"><label>المستلم:</label><input id="receiver"><label>تاريخ الشراء:</label><input type="date" id="pDate"><label>قيمة الشراء:</label><input type="number" id="pValue"><label>ملاحظات:</label><textarea id="notes"></textarea><button id="saveAsset" class="btn">حفظ</button>`; let { closeModal, modalContent } = showModal(html); modalContent.querySelector('#saveAsset').onclick = async () => { let asset = { name: modalContent.querySelector('#name').value, type: modalContent.querySelector('#type').value, serial: modalContent.querySelector('#serial').value, receiver: modalContent.querySelector('#receiver').value, purchaseDate: modalContent.querySelector('#pDate').value, purchaseValue: parseFloat(modalContent.querySelector('#pValue').value) || 0, notes: modalContent.querySelector('#notes').value }; if (!asset.name) { showToast("الاسم مطلوب"); return; } await addAsset(asset); closeModal(); renderAssetsList(); showToast("تمت الإضافة"); }; };
+        document.getElementById('generateAllAssetsReportBtn').onclick = async () => { let month = document.getElementById('assetReportMonth').value; if (!month) { showToast("اختر الشهر"); return; } await generateAllAssetsMonthlyReport(month); };
         document.getElementById('assetReportMonth').value = new Date().toISOString().slice(0,7);
         document.getElementById('generateOverallSalaryReportBtn').onclick = async () => { await generateOverallSalaryReport(); };
-        // التبويبات الرئيسية
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-                btn.classList.add('active');
-                currentTab = btn.dataset.tab;
-                document.querySelectorAll('#employeesSection, #purchasesSection, #salesSection, #expensesSection, #transportSection, #projectExpensesSection, #mirrorSection, #assetsSection').forEach(sec=>sec.style.display='none');
-                document.getElementById(`${currentTab}Section`).style.display = 'block';
-                if (currentTab === 'assets') renderAssetsList();
-                else if (currentTab === 'mirror') {
-                    renderMirrorSection('mirror_sales', 'mirrorSalesList', 'مبيعات مرايا');
-                    renderMirrorSection('mirror_purchases', 'mirrorPurchasesList', 'مشتريات مرايا');
-                    renderMirrorSection('mirror_costs', 'mirrorCostsList', 'تكاليف مرايا');
-                } else if (currentTab === 'employees') renderEmployees();
-                else renderAccountingSection(currentTab);
-            };
-        });
-        // التبويبات الفرعية للمرايا
-        document.querySelectorAll('.mirror-subtab-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.mirror-subtab-btn').forEach(b=>b.classList.remove('active'));
-                btn.classList.add('active');
-                let tab = btn.dataset.mirrorTab;
-                document.getElementById('mirror_sales_area').style.display = tab === 'mirror_sales' ? 'block' : 'none';
-                document.getElementById('mirror_purchases_area').style.display = tab === 'mirror_purchases' ? 'block' : 'none';
-                document.getElementById('mirror_costs_area').style.display = tab === 'mirror_costs' ? 'block' : 'none';
-                if (tab === 'mirror_sales') renderMirrorSection('mirror_sales', 'mirrorSalesList', 'مبيعات مرايا');
-                else if (tab === 'mirror_purchases') renderMirrorSection('mirror_purchases', 'mirrorPurchasesList', 'مشتريات مرايا');
-                else if (tab === 'mirror_costs') renderMirrorSection('mirror_costs', 'mirrorCostsList', 'تكاليف مرايا');
-            };
-        });
-        // التبويبات الفرعية للأصول
-        document.querySelectorAll('.asset-subtab-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.asset-subtab-btn').forEach(b=>b.classList.remove('active'));
-                btn.classList.add('active');
-                let tab = btn.dataset.assetTab;
-                document.getElementById('assets_list_area').style.display = tab === 'assets_list' ? 'block' : 'none';
-                document.getElementById('assets_reports_area').style.display = tab === 'assets_reports' ? 'block' : 'none';
-                if (tab === 'assets_list') renderAssetsList();
-            };
-        });
-        // قائمة المحاسبة الجانبية
-        document.querySelectorAll('.accounting-item').forEach(item => {
-            item.onclick = () => {
-                let section = item.dataset.section;
-                let tabBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.dataset.tab === section);
-                if (tabBtn) tabBtn.click();
-            };
-        });
-        // تصدير واستيراد
-        document.getElementById('exportDataBtn').onclick = async () => {
-            let data = {
-                projects: await db.getAll('projects'),
-                purchases: await db.getAll('purchases'),
-                sales: await db.getAll('sales'),
-                expenses: await db.getAll('expenses'),
-                transport: await db.getAll('transport'),
-                projectExpenses: await db.getAll('projectExpenses'),
-                mirror_sales: await db.getAll('mirror_sales'),
-                mirror_purchases: await db.getAll('mirror_purchases'),
-                mirror_costs: await db.getAll('mirror_costs'),
-                categories: await db.getAll('categories'),
-                employees: await db.getAll('employees'),
-                transactions: await db.getAll('transactions'),
-                employee_monthly_notes: await db.getAll('employee_monthly_notes'),
-                payments: await db.getAll('payments'),
-                assets: await db.getAll('assets'),
-                asset_transactions: await db.getAll('asset_transactions')
-            };
-            let blob = new Blob([JSON.stringify(data)], {type:"application/json"});
-            let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `watad_backup_${new Date().toISOString().slice(0,19)}.json`; a.click(); URL.revokeObjectURL(blob);
-            showToast("تم التصدير");
-        };
-        // ------------- إصلاح زر الاستيراد -------------
+        document.querySelectorAll('.tab-btn').forEach(btn => { btn.onclick = () => { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); currentTab = btn.dataset.tab; document.querySelectorAll('#employeesSection, #purchasesSection, #salesSection, #expensesSection, #transportSection, #projectExpensesSection, #mirrorSection, #assetsSection').forEach(sec=>sec.style.display='none'); document.getElementById(`${currentTab}Section`).style.display = 'block'; if (currentTab === 'assets') renderAssetsList(); else if (currentTab === 'mirror') { renderMirrorSection('mirror_sales', 'mirrorSalesList', 'مبيعات مرايا'); renderMirrorSection('mirror_purchases', 'mirrorPurchasesList', 'مشتريات مرايا'); renderMirrorSection('mirror_costs', 'mirrorCostsList', 'تكاليف مرايا'); } else if (currentTab === 'employees') renderEmployees(); else renderAccountingSection(currentTab); }; });
+        document.querySelectorAll('.mirror-subtab-btn').forEach(btn => { btn.onclick = () => { document.querySelectorAll('.mirror-subtab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); let tab = btn.dataset.mirrorTab; document.getElementById('mirror_sales_area').style.display = tab === 'mirror_sales' ? 'block' : 'none'; document.getElementById('mirror_purchases_area').style.display = tab === 'mirror_purchases' ? 'block' : 'none'; document.getElementById('mirror_costs_area').style.display = tab === 'mirror_costs' ? 'block' : 'none'; if (tab === 'mirror_sales') renderMirrorSection('mirror_sales', 'mirrorSalesList', 'مبيعات مرايا'); else if (tab === 'mirror_purchases') renderMirrorSection('mirror_purchases', 'mirrorPurchasesList', 'مشتريات مرايا'); else if (tab === 'mirror_costs') renderMirrorSection('mirror_costs', 'mirrorCostsList', 'تكاليف مرايا'); }; });
+        document.querySelectorAll('.asset-subtab-btn').forEach(btn => { btn.onclick = () => { document.querySelectorAll('.asset-subtab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); let tab = btn.dataset.assetTab; document.getElementById('assets_list_area').style.display = tab === 'assets_list' ? 'block' : 'none'; document.getElementById('assets_reports_area').style.display = tab === 'assets_reports' ? 'block' : 'none'; if (tab === 'assets_list') renderAssetsList(); }; });
+        document.querySelectorAll('.accounting-item').forEach(item => { item.onclick = () => { let section = item.dataset.section; let tabBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.dataset.tab === section); if (tabBtn) tabBtn.click(); }; });
+        document.getElementById('exportDataBtn').onclick = async () => { let data = { projects: await db.getAll('projects'), purchases: await db.getAll('purchases'), sales: await db.getAll('sales'), expenses: await db.getAll('expenses'), transport: await db.getAll('transport'), projectExpenses: await db.getAll('projectExpenses'), mirror_sales: await db.getAll('mirror_sales'), mirror_purchases: await db.getAll('mirror_purchases'), mirror_costs: await db.getAll('mirror_costs'), categories: await db.getAll('categories'), employees: await db.getAll('employees'), transactions: await db.getAll('transactions'), employee_monthly_notes: await db.getAll('employee_monthly_notes'), payments: await db.getAll('payments'), assets: await db.getAll('assets'), asset_transactions: await db.getAll('asset_transactions') }; let blob = new Blob([JSON.stringify(data)], {type:"application/json"}); let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `watad_backup_${new Date().toISOString().slice(0,19)}.json`; a.click(); URL.revokeObjectURL(blob); showToast("تم التصدير"); };
         document.getElementById('importDataBtn').onclick = () => {
-    let inp = document.createElement('input');
-    inp.type = 'file';
-    inp.accept = 'application/json';
-    inp.onchange = async e => {
-        try {
-            let text = await e.target.files[0].text();
-            let data = JSON.parse(text);
-            let counts = {};
-
-            // تحويل أي قيمة إلى String بشكل آمن
-            function toStr(val) {
-                return val !== undefined && val !== null ? String(val) : null;
-            }
-
-            // قائمة المجموعات بالترتيب المنطقي
-            const storesInOrder = [
-                'categories', 'projects', 'employees', 
-                'purchases', 'sales', 'expenses', 'transport', 'projectExpenses',
-                'mirror_sales', 'mirror_purchases', 'mirror_costs',
-                'transactions', 'employee_monthly_notes', 'payments',
-                'assets', 'asset_transactions'
-            ];
-
-            for (let store of storesInOrder) {
-                if (data[store] && Array.isArray(data[store])) {
-                    console.log(`🔄 استيراد ${store}: ${data[store].length} عنصر`);
-                    let added = 0;
-                    for (let it of data[store]) {
-                        try {
-                            // 1. إزالة المعرفات القديمة
-                            delete it._id;
-                            delete it.__v;
-
-                            // 2. تحويل جميع الحقول الشبيهة بالمعرفات إلى String
-                            if (it.id !== undefined) it.id = toStr(it.id);
-                            if (it.projectId !== undefined) it.projectId = toStr(it.projectId);
-                            if (it.categoryId !== undefined) it.categoryId = toStr(it.categoryId);
-                            if (it.employeeId !== undefined) it.employeeId = toStr(it.employeeId);
-                            if (it.parentId !== undefined) it.parentId = toStr(it.parentId);
-                            if (it.assetId !== undefined) it.assetId = toStr(it.assetId);
-                            
-                            // 3. التأكد من وجود قيمة أساسية (مثل name للفئات والمشاريع)
-                            if (store === 'categories' && !it.name) continue;
-                            if (store === 'projects' && !it.name) continue;
-                            if (store === 'employees' && !it.fullName) continue;
-
-                            // 4. إضافة العنصر
-                            await db.add(store, it);
-                            added++;
-                        } catch (errItem) {
-                            console.error(`❌ فشل إضافة عنصر في ${store}:`, it, errItem);
-                        }
-                    }
-                    counts[store] = added;
-                    console.log(`✅ تمت إضافة ${added} من ${data[store].length} في ${store}`);
-                }
-            }
-
-            // تحديث الواجهة بعد الاستيراد
-            await refreshAll();
-
-            // رسالة نجاح مفصلة
-            let summary = Object.entries(counts)
-                .filter(([,v]) => v > 0)
-                .map(([k,v]) => `${k}: ${v}`)
-                .join('\n');
-            if (summary) {
-                showToast(`✅ تم استيراد:\n${summary}`);
-            } else {
-                showToast(`⚠️ لم يتم استيراد أي بيانات. تأكد من صحة ملف JSON.`);
-            }
-        } catch (err) {
-            console.error(err);
-            showToast(`❌ خطأ في الاستيراد: ${err.message}\nراجع وحدة التحكم (F12) للتفاصيل.`);
-        }
-    };
-    inp.click();
-};
-        // Sidebar toggle
-        const sidebar = document.getElementById('sidebar');
-        const toggleBtn = document.getElementById('sidebarToggleBtn');
-        const mobileBtn = document.getElementById('mobileMenuBtn');
-        toggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
-            toggleBtn.innerHTML = sidebar.classList.contains('collapsed') ? '<i class="fas fa-bars"></i> <span>إظهار القائمة</span>' : '<i class="fas fa-bars"></i> <span>إخفاء القائمة</span>';
-        });
-        if (mobileBtn) {
-            mobileBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('open');
-            });
-            document.addEventListener('click', (e) => {
-                if (!sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
-                    sidebar.classList.remove('open');
-                }
-            });
-        }
+            let inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
+            inp.onchange = async e => {
+                try {
+                    let text = await e.target.files[0].text();
+                    let data = JSON.parse(text);
+                    let catMap = new Map(), projMap = new Map(), empMap = new Map(), assetMap = new Map();
+                    if (data.categories) for (let cat of data.categories) { let oldId = cat.id; delete cat._id; delete cat.id; let newCat = await db.add('categories', cat); if (oldId) catMap.set(String(oldId), newCat.id); }
+                    if (data.projects) for (let proj of data.projects) { let oldId = proj.id; delete proj._id; delete proj.id; let newProj = await db.add('projects', proj); if (oldId) projMap.set(String(oldId), newProj.id); }
+                    if (data.assets) for (let asset of data.assets) { let oldId = asset.id; delete asset._id; delete asset.id; let newAsset = await db.add('assets', asset); if (oldId) assetMap.set(String(oldId), newAsset.id); }
+                    if (data.employees) for (let emp of data.employees) { let oldId = emp.id; let oldCatId = emp.categoryId; delete emp._id; delete emp.id; if (oldCatId && catMap.has(String(oldCatId))) emp.categoryId = catMap.get(String(oldCatId)); let newEmp = await db.add('employees', emp); if (oldId) empMap.set(String(oldId), newEmp.id); }
+                    const dependent = ['purchases','sales','expenses','transport','projectExpenses','transactions','payments','asset_transactions','mirror_sales','mirror_purchases','mirror_costs','employee_monthly_notes'];
+                    for (let store of dependent) if (data[store]) for (let item of data[store]) { delete item._id; delete item.id; if (item.projectId && projMap.has(String(item.projectId))) item.projectId = projMap.get(String(item.projectId)); if (item.categoryId && catMap.has(String(item.categoryId))) item.categoryId = catMap.get(String(item.categoryId)); if (item.employeeId && empMap.has(String(item.employeeId))) item.employeeId = empMap.get(String(item.employeeId)); if (item.assetId && assetMap.has(String(item.assetId))) item.assetId = assetMap.get(String(item.assetId)); if (item.parentId && (store==='payments')) { /* leave as is */ } await db.add(store, item); }
+                    await refreshAll();
+                    showToast("✅ تم الاستيراد بنجاح مع تحويل العلاقات");
+                } catch (err) { console.error(err); showToast("❌ فشل الاستيراد: " + err.message); }
+            };
+            inp.click();
+        };
+        const sidebar = document.getElementById('sidebar'); const toggleBtn = document.getElementById('sidebarToggleBtn'); const mobileBtn = document.getElementById('mobileMenuBtn');
+        toggleBtn.addEventListener('click', () => { sidebar.classList.toggle('collapsed'); toggleBtn.innerHTML = sidebar.classList.contains('collapsed') ? '<i class="fas fa-bars"></i> <span>إظهار القائمة</span>' : '<i class="fas fa-bars"></i> <span>إخفاء القائمة</span>'; });
+        if (mobileBtn) { mobileBtn.addEventListener('click', () => { sidebar.classList.toggle('open'); }); document.addEventListener('click', (e) => { if (!sidebar.contains(e.target) && !mobileBtn.contains(e.target)) sidebar.classList.remove('open'); }); }
     }
 
     document.getElementById('loginBtn').onclick = () => {

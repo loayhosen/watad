@@ -254,7 +254,7 @@
 
 <script>
 (function() {
-    // -------------------- طبقة API ديناميكية --------------------
+    // -------------------- طبقة API --------------------
     const API_BASE = window.location.origin + '/api';
 
     class ServerAPI {
@@ -339,6 +339,7 @@
         getAllFromIndex: (store, indexName, value) => ServerAPI.getAllFromIndex(store, indexName, value)
     };
 
+    // -------------------- متغيرات الحالة --------------------
     let isReadOnly = false;
     let currentTab = "employees";
     let currentCategoryId = null;
@@ -348,7 +349,7 @@
     let currentMirrorTab = "mirror_sales";
     let currentAssetTab = "assets_list";
 
-    // ------------------------ دوال مساعدة ------------------------
+    // -------------------- دوال مساعدة --------------------
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
     function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
     function showModal(contentHTML) {
@@ -478,7 +479,7 @@
         let rows = '';
         for (let s of sales) {
             totalFull += s.totalAmount; totalPaid += s.paidAmount;
-            rows += `<tr><td style="padding:8px">${new Date(s.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(s.description||'')}</td><td style="padding:8px">${s.totalAmount}</td><td style="padding:8px">${s.paidAmount}</td><td style="padding:8px">${s.totalAmount - s.paidAmount}</td></tr>`;
+            rows += `<td><td style="padding:8px">${new Date(s.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(s.description||'')}</td><td style="padding:8px">${s.totalAmount}</td><td style="padding:8px">${s.paidAmount}</td><td style="padding:8px">${s.totalAmount - s.paidAmount}</td></tr>`;
         }
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
@@ -504,7 +505,7 @@
         let totalProjectExp = projectExpenses.reduce((a,b)=>a+b.amount,0);
         let totalExpenses = totalGeneralExp + totalTransportExp + totalProjectExp;
         let profit = totalSalesFull - (totalPurchasesFull + totalExpenses);
-        let salesRows = sales.map(s=>`<tr><td style="padding:8px">${new Date(s.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(s.description||'')}</td><td style="padding:8px">${s.totalAmount}</td><td style="padding:8px">${s.paidAmount}</td><td style="padding:8px">${s.totalAmount-s.paidAmount}</td><td style="padding:8px">${escapeHtml(s.details||'')}</td></tr>`).join('');
+        let salesRows = sales.map(s=>`<tr><td style="padding:8px">${new Date(s.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(s.description||'')}</td><td style="padding:8px">${s.totalAmount}</td><td style="padding:8px">${s.paidAmount}</td><td style="padding:8px">${s.totalAmount-s.paidAmount}</td><td style="padding:8px">${escapeHtml(s.details||'')}</td></td>`).join('');
         let purchasesRows = purchases.map(p=>`<tr><td style="padding:8px">${new Date(p.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(p.description||'')}</td><td style="padding:8px">${p.totalAmount}</td><td style="padding:8px">${p.paidAmount}</td><td style="padding:8px">${p.totalAmount-p.paidAmount}</td><td style="padding:8px">${escapeHtml(p.details||'')}</td></tr>`).join('');
         let generalRows = generalExpenses.map(e=>`<tr><td style="padding:8px">${new Date(e.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(e.description||'')}</td><td style="padding:8px">${escapeHtml(e.category||'')}</td><td style="padding:8px">${e.amount}</td><td style="padding:8px">${escapeHtml(e.details||'')}</td></tr>`).join('');
         let transportRows = transportExpenses.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(t.customerName||'')}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.details||'')}</td></tr>`).join('');
@@ -525,9 +526,9 @@
                 <hr><p><strong>📉 إجمالي المصاريف:</strong> ${totalExpenses.toFixed(2)} ر.س</p>
                 <p><strong>📈 صافي الربح (المبيعات - (المشتريات+المصاريف)):</strong> <span style="color:${profit>=0?'green':'red'}">${profit.toFixed(2)} ر.س</span></p>
             </div>
-            <h3>📋 تفاصيل المبيعات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${salesRows}</tbody></td>
-            <h3>📋 تفاصيل المشتريات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th><tr></thead><tbody>${purchasesRows}</tbody></table>
-            <h3>📋 تفاصيل المصاريف العامة</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${generalRows}</tbody></table>
+            <h3>📋 تفاصيل المبيعات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${salesRows}</tbody></table>
+            <h3>📋 تفاصيل المشتريات</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${purchasesRows}</tbody></table>
+            <h3>📋 تفاصيل المصاريف العامة</h3><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${generalRows}</tbody></td>
             <h3>📋 تفاصيل مصاريف النقل</h3><table border="1"><thead><tr><th>التاريخ</th><th>العميل</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${transportRows}</tbody></table>
             <h3>📋 تفاصيل مصاريف المشروع</h3><table border="1"><thead><tr><th>التاريخ</th><th>اسم المصروف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${projectExpRows}</tbody></table>
             <div style="text-align:center; margin-top:30px;">نظام وتد المتقدم - إدارة المشاريع والمحاسبة</div>`;
@@ -551,7 +552,7 @@
         let txs = await getTransactions(emp.id);
         txs.sort((a,b)=>new Date(b.date)-new Date(a.date));
         let rows = txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.monthKey}</td><td style="padding:8px">${t.type==='advance'?'سلفة':t.type==='deduction'?'خصم':t.type==='bonus'?'مكافأة':'تحويل'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.reason||'')}</td><td style="padding:8px"><button class="btn-small del-tx-btn" data-id="${t.id}">حذف</button></td></tr>`).join('');
-        let html = `<h3>سجل معاملات ${emp.fullName}</h3><table border="1"><thead><tr><th>التاريخ</th><th>الشهر</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>حذف</th><tr></thead><tbody>${rows}</tbody><table><button id="closeLogBtn">إغلاق</button>`;
+        let html = `<h3>سجل معاملات ${emp.fullName}</h3><table border="1"><thead><tr><th>التاريخ</th><th>الشهر</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>حذف</th></tr></thead><tbody>${rows}</tbody></table><button id="closeLogBtn">إغلاق</button>`;
         let { closeModal, modalContent } = showModal(html);
         modalContent.querySelectorAll('.del-tx-btn').forEach(btn=>{ btn.onclick = async () => { let id = parseInt(btn.dataset.id); if (confirm("حذف المعاملة؟")) { await deleteTransactionAndUpdateEmployee(id, emp.id); closeModal(); await renderEmployees(); showToast("تم الحذف"); } }; });
         modalContent.querySelector('#closeLogBtn').onclick = closeModal;
@@ -645,7 +646,7 @@
         let note = await getEmployeeMonthlyNote(emp.id, monthKey);
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
-        div.innerHTML = `<h2>تقرير الموظف الشهري</h2><p>${emp.fullName} - ${monthKey}</p><p>الراتب: ${emp.baseSalary}</p><p>الخصومات: ${ded}</p><p>السلف: ${adv}</p><p>صافي الراتب المستحق: ${net}</p><p>المكافآت: ${bon}</p><p>الراتب المحول: ${trans}</p>${note?`<div>ملاحظة: ${escapeHtml(note)}</div>`:''}<table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>السبب</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='advance'?'سلفة':t.type==='deduction'?'خصم':t.type==='bonus'?'مكافأة':'تحويل'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.reason||'')}</td></tr>`).join('')}</tbody></table>`;
+        div.innerHTML = `<h2>تقرير الموظف الشهري</h2><p>${emp.fullName} - ${monthKey}</p><p>الراتب: ${emp.baseSalary}</p><p>الخصومات: ${ded}</p><p>السلف: ${adv}</p><p>صافي الراتب المستحق: ${net}</p><p>المكافآت: ${bon}</p><p>الراتب المحول: ${trans}</p>${note?`<div>ملاحظة: ${escapeHtml(note)}</div>`:''}<table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>السبب</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='advance'?'سلفة':t.type==='deduction'?'خصم':t.type==='bonus'?'مكافأة':'تحويل'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.reason||'')}</td></tr>`).join('')}</tbody><tr>`;
         await printMultiPagePDF(div);
     }
     async function generateOverallSalaryReport() {
@@ -786,7 +787,7 @@
                 <p><strong>المبلغ الكامل الحالي:</strong> ${invoice.totalAmount} ر.س</p>
                 <p><strong>المدفوع حالياً:</strong> ${invoice.paidAmount} ر.س</p>
                 <p><strong>المتبقي:</strong> ${invoice.totalAmount - invoice.paidAmount} ر.س</p>
-                <table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th>حذف</th></td></thead><tbody>${payments.map(p=>`<tr><td>${new Date(p.date).toLocaleDateString()}</td><td>${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td>${p.amount}</td><td>${escapeHtml(p.note||'')}</td><td><button class="btn-small del-pay" data-id="${p.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr>
+                <table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th>حذف</th></tr></thead><tbody>${payments.map(p=>`<tr><td style="padding:8px">${new Date(p.date).toLocaleDateString()}</td><td style="padding:8px">${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td style="padding:8px">${p.amount}</td><td style="padding:8px">${escapeHtml(p.note||'')}</td><td style="padding:8px"><button class="btn-small del-pay" data-id="${p.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr>
                 <label>دفعة جديدة (تخفض المتبقي):</label><input type="number" id="newAmount"><input type="date" id="newDate"><textarea id="newNote"></textarea><button id="addPayBtn" class="btn">إضافة دفعة</button>
                 <hr><label>مبلغ إضافي (يزيد إجمالي الفاتورة):</label><input type="number" id="extraAmount"><input type="date" id="extraDate"><textarea id="extraNote"></textarea><button id="addExtraBtn" class="btn">إضافة مبلغ إضافي</button>
                 <button id="closePayBtn" class="btn">إغلاق</button>`;
@@ -804,7 +805,7 @@
         div.innerHTML = `<h2>${type==='sales'?'فاتورة مبيعات':'فاتورة مشتريات'}</h2>
             <p>التاريخ: ${new Date(entry.date).toLocaleDateString()}</p><p>الوصف: ${escapeHtml(entry.description||'')}</p>
             <p>المبلغ الكامل: ${entry.totalAmount}</p><p>المدفوع: ${entry.paidAmount}</p><p>المتبقي: ${entry.totalAmount - entry.paidAmount}</p>
-            <h3>سجل الدفعات والمبالغ الإضافية</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th></tr></thead><tbody>${payments.map(p=>`<tr><td>${new Date(p.date).toLocaleDateString()}</td><td>${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td>${p.amount}</td><td>${escapeHtml(p.note||'')}</td></tr>`).join('')}</tbody></table>`;
+            <h3>سجل الدفعات والمبالغ الإضافية</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظة</th></tr></thead><tbody>${payments.map(p=>`<tr><td style="padding:8px">${new Date(p.date).toLocaleDateString()}</td><td style="padding:8px">${p.isAdditional ? 'مبلغ إضافي' : 'دفعة'}</td><td style="padding:8px">${p.amount}</td><td style="padding:8px">${escapeHtml(p.note||'')}</td></table>`).join('')}</tbody></table>`;
         await printMultiPagePDF(div);
     }
     async function addAccountingEntry(store, data) {
@@ -976,7 +977,7 @@
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
         let total = entries.reduce((s,e)=>s+(e.totalAmount||e.amount),0);
-        let rows = entries.map(e=>`<td><td>${new Date(e.date).toLocaleDateString()}</td><td>${escapeHtml(e.description||e.customerName||e.projectName||'')}</td><td>${escapeHtml(e.category||'')}</td><td>${e.totalAmount||e.amount}</td><td>${e.paidAmount||0}</td><td>${(e.totalAmount||e.amount)-(e.paidAmount||0)}</td><td>${escapeHtml(e.details||'')}</td></table>`).join('');
+        let rows = entries.map(e=>`<tr><td style="padding:8px">${new Date(e.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(e.description||e.customerName||e.projectName||'')}</td><td style="padding:8px">${escapeHtml(e.category||'')}</td><td style="padding:8px">${e.totalAmount||e.amount}</td><td style="padding:8px">${e.paidAmount||0}</td><td style="padding:8px">${(e.totalAmount||e.amount)-(e.paidAmount||0)}</td><td style="padding:8px">${escapeHtml(e.details||'')}</td></tr>`).join('');
         div.innerHTML = `<h2>${name} - ${section}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th>الكامل</th><th>المدفوع</th><th>المتبقي</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></table>`;
         await printMultiPagePDF(div);
     }
@@ -1005,8 +1006,8 @@
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
         let total = entries.reduce((s,e)=>s+e.amount,0);
-        let rows = entries.map(e=>`<td><td>${new Date(e.date).toLocaleDateString()}</td><td>${escapeHtml(e.description||'')}</td><td>${e.amount}</td><td>${escapeHtml(e.details||'')}</td></tr>`).join('');
-        div.innerHTML = `<h2>تقرير ${title}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></td>`;
+        let rows = entries.map(e=>`<tr><td style="padding:8px">${new Date(e.date).toLocaleDateString()}</td><td style="padding:8px">${escapeHtml(e.description||'')}</td><td style="padding:8px">${e.amount}</td><td style="padding:8px">${escapeHtml(e.details||'')}</td></tr>`).join('');
+        div.innerHTML = `<h2>تقرير ${title}</h2><p>الإجمالي: ${total}</p><table border="1"><thead><tr><th>التاريخ</th><th>الوصف</th><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>${rows}</tbody></tr>`;
         await printMultiPagePDF(div);
     }
 
@@ -1036,7 +1037,7 @@
     }
     async function showAssetTransactionManager(asset) {
         let txs = await getAssetTransactions(asset.id);
-        let html = `<h3>معاملات الأصل: ${asset.name}</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th><th>حذف</th></tr></thead><tbody>${txs.map(t=>`<td><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td><td><button class="btn-small del-asset-tx" data-id="${t.id}">حذف</button></td></tr>`).join('')}</tbody></table><hr><h4>إضافة معاملة</h4><label>النوع:</label><select id="type"><option value="income">إيراد (إيجار)</option><option value="expense">مصروف (صيانة)</option></select><label>التاريخ:</label><input type="date" id="date"><label>المبلغ:</label><input type="number" id="amount"><label>الوصف:</label><textarea id="desc"></textarea><button id="addTxBtn" class="btn">إضافة</button><button id="closeTxBtn" class="btn">إغلاق</button>`;
+        let html = `<h3>معاملات الأصل: ${asset.name}</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th><th>حذف</th></td></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td><td style="padding:8px"><button class="btn-small del-asset-tx" data-id="${t.id}">حذف</button></td></tr>`).join('')}</tbody></tr><hr><h4>إضافة معاملة</h4><label>النوع:</label><select id="type"><option value="income">إيراد (إيجار)</option><option value="expense">مصروف (صيانة)</option></select><label>التاريخ:</label><input type="date" id="date"><label>المبلغ:</label><input type="number" id="amount"><label>الوصف:</label><textarea id="desc"></textarea><button id="addTxBtn" class="btn">إضافة</button><button id="closeTxBtn" class="btn">إغلاق</button>`;
         let { closeModal, modalContent } = showModal(html);
         modalContent.querySelector('#addTxBtn').onclick = async () => { let type = modalContent.querySelector('#type').value; let date = modalContent.querySelector('#date').value; let amount = parseFloat(modalContent.querySelector('#amount').value); let desc = modalContent.querySelector('#desc').value; if (!date || isNaN(amount) || amount<=0) { showToast("بيانات غير صحيحة"); return; } await addAssetTransaction(asset.id, type, amount, date, desc); closeModal(); showToast("تمت الإضافة"); renderAssetsList(); };
         modalContent.querySelectorAll('.del-asset-tx').forEach(btn => { btn.onclick = async () => { if (confirm("حذف المعاملة؟")) { await deleteAssetTransaction(btn.dataset.id); closeModal(); renderAssetsList(); showToast("تم الحذف"); } }; });
@@ -1056,7 +1057,7 @@
         let net = totalIncome - totalExpense;
         let div = document.createElement('div');
         div.style.cssText = 'background:white; padding:30px; font-family:Cairo; direction:rtl; width:800px';
-        div.innerHTML = `<h2>تقرير الأصل: ${escapeHtml(asset.name)}</h2><p>النوع: ${escapeHtml(asset.type||'')}</p><p>الرقم: ${escapeHtml(asset.serial||'')}</p><p>المستلم: ${escapeHtml(asset.receiver||'')}</p><p>تاريخ الشراء: ${asset.purchaseDate||''}</p><p>قيمة الشراء: ${asset.purchaseValue||0}</p><h3>المعاملات</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></td><p>إجمالي الإيرادات: ${totalIncome}</p><p>إجمالي المصروفات: ${totalExpense}</p><p>صافي الربح من الأصل: ${net}</p>`;
+        div.innerHTML = `<h2>تقرير الأصل: ${escapeHtml(asset.name)}</h2><p>النوع: ${escapeHtml(asset.type||'')}</p><p>الرقم: ${escapeHtml(asset.serial||'')}</p><p>المستلم: ${escapeHtml(asset.receiver||'')}</p><p>تاريخ الشراء: ${asset.purchaseDate||''}</p><p>قيمة الشراء: ${asset.purchaseValue||0}</p><h3>المعاملات</h3><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table><p>إجمالي الإيرادات: ${totalIncome}</p><p>إجمالي المصروفات: ${totalExpense}</p><p>صافي الربح من الأصل: ${net}</p>`;
         await printMultiPagePDF(div);
     }
     async function generateAllAssetsMonthlyReport(monthKey) {
@@ -1068,7 +1069,7 @@
             let txs = await getAssetTransactions(a.id, monthKey);
             let inc = txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
             let exp = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-            content += `<div style="margin-top:20px;"><h3>${escapeHtml(a.name)}</h3><p>الإيرادات: ${inc} | المصروفات: ${exp} | الصافي: ${inc-exp}</p><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.type==='income'?'إيراد':'مصروف'}</td><td>${t.amount}</td><td>${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table></div>`;
+            content += `<div style="margin-top:20px;"><h3>${escapeHtml(a.name)}</h3><p>الإيرادات: ${inc} | المصروفات: ${exp} | الصافي: ${inc-exp}</p><table border="1"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>الوصف</th></tr></thead><tbody>${txs.map(t=>`<tr><td style="padding:8px">${new Date(t.date).toLocaleDateString()}</td><td style="padding:8px">${t.type==='income'?'إيراد':'مصروف'}</td><td style="padding:8px">${t.amount}</td><td style="padding:8px">${escapeHtml(t.description||'')}</td></tr>`).join('')}</tbody></table></div>`;
         }
         if (assets.length===0) content += '<p>لا توجد أصول</p>';
         div.innerHTML = content;
@@ -1207,25 +1208,161 @@
         document.querySelectorAll('.asset-subtab-btn').forEach(btn => { btn.onclick = () => { document.querySelectorAll('.asset-subtab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); let tab = btn.dataset.assetTab; document.getElementById('assets_list_area').style.display = tab === 'assets_list' ? 'block' : 'none'; document.getElementById('assets_reports_area').style.display = tab === 'assets_reports' ? 'block' : 'none'; if (tab === 'assets_list') renderAssetsList(); }; });
         document.querySelectorAll('.accounting-item').forEach(item => { item.onclick = () => { let section = item.dataset.section; let tabBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.dataset.tab === section); if (tabBtn) tabBtn.click(); }; });
         document.getElementById('exportDataBtn').onclick = async () => { let data = { projects: await db.getAll('projects'), purchases: await db.getAll('purchases'), sales: await db.getAll('sales'), expenses: await db.getAll('expenses'), transport: await db.getAll('transport'), projectExpenses: await db.getAll('projectExpenses'), mirror_sales: await db.getAll('mirror_sales'), mirror_purchases: await db.getAll('mirror_purchases'), mirror_costs: await db.getAll('mirror_costs'), categories: await db.getAll('categories'), employees: await db.getAll('employees'), transactions: await db.getAll('transactions'), employee_monthly_notes: await db.getAll('employee_monthly_notes'), payments: await db.getAll('payments'), assets: await db.getAll('assets'), asset_transactions: await db.getAll('asset_transactions') }; let blob = new Blob([JSON.stringify(data)], {type:"application/json"}); let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `watad_backup_${new Date().toISOString().slice(0,19)}.json`; a.click(); URL.revokeObjectURL(blob); showToast("تم التصدير"); };
+        
+        // إصلاح شامل لوظيفة الاستيراد
         document.getElementById('importDataBtn').onclick = () => {
             let inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
             inp.onchange = async e => {
                 try {
                     let text = await e.target.files[0].text();
                     let data = JSON.parse(text);
-                    let catMap = new Map(), projMap = new Map(), empMap = new Map(), assetMap = new Map();
-                    if (data.categories) for (let cat of data.categories) { let oldId = cat.id; delete cat._id; delete cat.id; let newCat = await db.add('categories', cat); if (oldId) catMap.set(String(oldId), newCat.id); }
-                    if (data.projects) for (let proj of data.projects) { let oldId = proj.id; delete proj._id; delete proj.id; let newProj = await db.add('projects', proj); if (oldId) projMap.set(String(oldId), newProj.id); }
-                    if (data.assets) for (let asset of data.assets) { let oldId = asset.id; delete asset._id; delete asset.id; let newAsset = await db.add('assets', asset); if (oldId) assetMap.set(String(oldId), newAsset.id); }
-                    if (data.employees) for (let emp of data.employees) { let oldId = emp.id; let oldCatId = emp.categoryId; delete emp._id; delete emp.id; if (oldCatId && catMap.has(String(oldCatId))) emp.categoryId = catMap.get(String(oldCatId)); let newEmp = await db.add('employees', emp); if (oldId) empMap.set(String(oldId), newEmp.id); }
-                    const dependent = ['purchases','sales','expenses','transport','projectExpenses','transactions','payments','asset_transactions','mirror_sales','mirror_purchases','mirror_costs','employee_monthly_notes'];
-                    for (let store of dependent) if (data[store]) for (let item of data[store]) { delete item._id; delete item.id; if (item.projectId && projMap.has(String(item.projectId))) item.projectId = projMap.get(String(item.projectId)); if (item.categoryId && catMap.has(String(item.categoryId))) item.categoryId = catMap.get(String(item.categoryId)); if (item.employeeId && empMap.has(String(item.employeeId))) item.employeeId = empMap.get(String(item.employeeId)); if (item.assetId && assetMap.has(String(item.assetId))) item.assetId = assetMap.get(String(item.assetId)); if (item.parentId && (store==='payments')) { /* leave as is */ } await db.add(store, item); }
+                    
+                    // خريطة لتحويل المعرفات القديمة إلى الجديدة
+                    let catMap = new Map();   // old category id -> new id
+                    let projMap = new Map();  // old project id -> new id
+                    let empMap = new Map();   // old employee id -> new id
+                    let assetMap = new Map(); // old asset id -> new id
+
+                    // 1. استيراد الفئات مع بناء الخريطة (بدون تكرار)
+                    if (data.categories && Array.isArray(data.categories)) {
+                        for (let cat of data.categories) {
+                            let oldId = cat.id;
+                            delete cat._id;
+                            delete cat.id;
+                            // تجنب إضافة فئات مكررة بناءً على الاسم (يمكن تحسينها)
+                            let existing = await db.getAllFromIndex('categories', 'name', cat.name);
+                            let newCat;
+                            if (existing.length > 0) {
+                                newCat = existing[0];
+                                // تحديث الفئة الموجودة إذا لزم الأمر
+                                Object.assign(newCat, cat);
+                                await db.put('categories', newCat);
+                            } else {
+                                newCat = await db.add('categories', cat);
+                            }
+                            if (oldId) catMap.set(String(oldId), newCat.id);
+                        }
+                    }
+
+                    // 2. استيراد المشاريع
+                    if (data.projects && Array.isArray(data.projects)) {
+                        for (let proj of data.projects) {
+                            let oldId = proj.id;
+                            delete proj._id;
+                            delete proj.id;
+                            let existing = await db.getAllFromIndex('projects', 'name', proj.name);
+                            let newProj;
+                            if (existing.length > 0) {
+                                newProj = existing[0];
+                                Object.assign(newProj, proj);
+                                await db.put('projects', newProj);
+                            } else {
+                                newProj = await db.add('projects', proj);
+                            }
+                            if (oldId) projMap.set(String(oldId), newProj.id);
+                        }
+                    }
+
+                    // 3. استيراد الأصول
+                    if (data.assets && Array.isArray(data.assets)) {
+                        for (let asset of data.assets) {
+                            let oldId = asset.id;
+                            delete asset._id;
+                            delete asset.id;
+                            let existing = await db.getAllFromIndex('assets', 'name', asset.name);
+                            let newAsset;
+                            if (existing.length > 0) {
+                                newAsset = existing[0];
+                                Object.assign(newAsset, asset);
+                                await db.put('assets', newAsset);
+                            } else {
+                                newAsset = await db.add('assets', asset);
+                            }
+                            if (oldId) assetMap.set(String(oldId), newAsset.id);
+                        }
+                    }
+
+                    // 4. استيراد الموظفين مع تحويل categoryId
+                    if (data.employees && Array.isArray(data.employees)) {
+                        for (let emp of data.employees) {
+                            let oldId = emp.id;
+                            let oldCatId = emp.categoryId;
+                            delete emp._id;
+                            delete emp.id;
+                            if (oldCatId && catMap.has(String(oldCatId))) {
+                                emp.categoryId = catMap.get(String(oldCatId));
+                            } else if (oldCatId) {
+                                // إذا لم يتم العثور على الفئة، نستخدم فئة افتراضية أو نحتفظ بالقيمة القديمة بعد تحويلها لنص؟
+                                emp.categoryId = String(oldCatId);
+                            }
+                            // تجنب تكرار الموظفين (على أساس الاسم) - اختياري
+                            let existing = await db.getAllFromIndex('employees', 'fullName', emp.fullName);
+                            let newEmp;
+                            if (existing.length > 0) {
+                                newEmp = existing[0];
+                                Object.assign(newEmp, emp);
+                                await db.put('employees', newEmp);
+                            } else {
+                                newEmp = await db.add('employees', emp);
+                            }
+                            if (oldId) empMap.set(String(oldId), newEmp.id);
+                        }
+                    }
+
+                    // 5. استيراد باقي الكيانات مع تحويل المعرفات
+                    const dependentStores = [
+                        'purchases', 'sales', 'expenses', 'transport', 'projectExpenses',
+                        'transactions', 'payments', 'asset_transactions', 'mirror_sales',
+                        'mirror_purchases', 'mirror_costs', 'employee_monthly_notes'
+                    ];
+                    for (let store of dependentStores) {
+                        if (data[store] && Array.isArray(data[store])) {
+                            for (let item of data[store]) {
+                                delete item._id;
+                                delete item.id;
+                                // تحويل projectId
+                                if (item.projectId !== undefined && projMap.has(String(item.projectId))) {
+                                    item.projectId = projMap.get(String(item.projectId));
+                                } else if (item.projectId !== undefined) {
+                                    item.projectId = String(item.projectId);
+                                }
+                                // تحويل categoryId (قد يظهر في expenses)
+                                if (item.categoryId !== undefined && catMap.has(String(item.categoryId))) {
+                                    item.categoryId = catMap.get(String(item.categoryId));
+                                }
+                                // تحويل employeeId
+                                if (item.employeeId !== undefined && empMap.has(String(item.employeeId))) {
+                                    item.employeeId = empMap.get(String(item.employeeId));
+                                } else if (item.employeeId !== undefined) {
+                                    item.employeeId = String(item.employeeId);
+                                }
+                                // تحويل parentId (للدفعات)
+                                if (item.parentId !== undefined && (store === 'payments')) {
+                                    // نحاول تحويل parentId باستخدام خريطة المبيعات/المشتريات - صعب هنا، لذا نتركها كنص
+                                    item.parentId = String(item.parentId);
+                                }
+                                // تحويل assetId
+                                if (item.assetId !== undefined && assetMap.has(String(item.assetId))) {
+                                    item.assetId = assetMap.get(String(item.assetId));
+                                } else if (item.assetId !== undefined) {
+                                    item.assetId = String(item.assetId);
+                                }
+                                // إضافة العنصر (قد نتحقق من التكرار، لكن لا يوجد فريد عالمي)
+                                await db.add(store, item);
+                            }
+                        }
+                    }
+
                     await refreshAll();
-                    showToast("✅ تم الاستيراد بنجاح مع تحويل العلاقات");
-                } catch (err) { console.error(err); showToast("❌ فشل الاستيراد: " + err.message); }
+                    showToast(`✅ تم الاستيراد بنجاح! تم استيراد: ${catMap.size} فئة، ${projMap.size} مشروع، ${empMap.size} موظف، ${assetMap.size} أصل.`);
+                } catch (err) {
+                    console.error(err);
+                    showToast(`❌ فشل الاستيراد: ${err.message}`);
+                }
             };
             inp.click();
         };
+
         const sidebar = document.getElementById('sidebar'); const toggleBtn = document.getElementById('sidebarToggleBtn'); const mobileBtn = document.getElementById('mobileMenuBtn');
         toggleBtn.addEventListener('click', () => { sidebar.classList.toggle('collapsed'); toggleBtn.innerHTML = sidebar.classList.contains('collapsed') ? '<i class="fas fa-bars"></i> <span>إظهار القائمة</span>' : '<i class="fas fa-bars"></i> <span>إخفاء القائمة</span>'; });
         if (mobileBtn) { mobileBtn.addEventListener('click', () => { sidebar.classList.toggle('open'); }); document.addEventListener('click', (e) => { if (!sidebar.contains(e.target) && !mobileBtn.contains(e.target)) sidebar.classList.remove('open'); }); }

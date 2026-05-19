@@ -1420,17 +1420,23 @@
             let data = JSON.parse(text);
             let counts = {};
 
-            // قائمة المجموعات التي نريد استيرادها
-            const stores = [
-                'projects', 'purchases', 'sales', 'expenses', 'transport',
-                'projectExpenses', 'mirror_sales', 'mirror_purchases', 'mirror_costs',
-                'categories', 'employees', 'transactions', 'employee_monthly_notes',
-                'payments', 'assets', 'asset_transactions'
+            // تحويل أي قيمة إلى String بشكل آمن
+            function toStr(val) {
+                return val !== undefined && val !== null ? String(val) : null;
+            }
+
+            // قائمة المجموعات بالترتيب المنطقي
+            const storesInOrder = [
+                'categories', 'projects', 'employees', 
+                'purchases', 'sales', 'expenses', 'transport', 'projectExpenses',
+                'mirror_sales', 'mirror_purchases', 'mirror_costs',
+                'transactions', 'employee_monthly_notes', 'payments',
+                'assets', 'asset_transactions'
             ];
 
-            for (let store of stores) {
+            for (let store of storesInOrder) {
                 if (data[store] && Array.isArray(data[store])) {
-                    console.log(`بدء استيراد ${store}: ${data[store].length} عنصر`);
+                    console.log(`🔄 استيراد ${store}: ${data[store].length} عنصر`);
                     let added = 0;
                     for (let it of data[store]) {
                         try {
@@ -1438,51 +1444,51 @@
                             delete it._id;
                             delete it.__v;
 
-                            // 2. تحويل أي حقل يشبه المعرف (id, projectId, ...) إلى String
-                            if (it.id !== undefined) {
-                                it.id = String(it.id);
-                            }
-                            if (it.projectId !== undefined) {
-                                it.projectId = String(it.projectId);
-                            }
-                            if (it.categoryId !== undefined) {
-                                it.categoryId = String(it.categoryId);
-                            }
-                            if (it.employeeId !== undefined) {
-                                it.employeeId = String(it.employeeId);
-                            }
-                            if (it.parentId !== undefined) {
-                                it.parentId = String(it.parentId);
-                            }
-                            if (it.assetId !== undefined) {
-                                it.assetId = String(it.assetId);
-                            }
-                            // تحويل أي حقل آخر قد يكون معرفاً (حسب الاسم)
-                            if (it.idNum) it.idNum = String(it.idNum);
+                            // 2. تحويل جميع الحقول الشبيهة بالمعرفات إلى String
+                            if (it.id !== undefined) it.id = toStr(it.id);
+                            if (it.projectId !== undefined) it.projectId = toStr(it.projectId);
+                            if (it.categoryId !== undefined) it.categoryId = toStr(it.categoryId);
+                            if (it.employeeId !== undefined) it.employeeId = toStr(it.employeeId);
+                            if (it.parentId !== undefined) it.parentId = toStr(it.parentId);
+                            if (it.assetId !== undefined) it.assetId = toStr(it.assetId);
                             
-                            // 3. إضافة العنصر الجديد
+                            // 3. التأكد من وجود قيمة أساسية (مثل name للفئات والمشاريع)
+                            if (store === 'categories' && !it.name) continue;
+                            if (store === 'projects' && !it.name) continue;
+                            if (store === 'employees' && !it.fullName) continue;
+
+                            // 4. إضافة العنصر
                             await db.add(store, it);
                             added++;
                         } catch (errItem) {
-                            console.error(`فشل إضافة عنصر في ${store}:`, it, errItem);
+                            console.error(`❌ فشل إضافة عنصر في ${store}:`, it, errItem);
                         }
                     }
                     counts[store] = added;
-                    console.log(`تمت إضافة ${added} من ${data[store].length} في ${store}`);
+                    console.log(`✅ تمت إضافة ${added} من ${data[store].length} في ${store}`);
                 }
             }
 
+            // تحديث الواجهة بعد الاستيراد
             await refreshAll();
-            let msg = `✅ تم الاستيراد بنجاح:\n` +
-                Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join('\n');
-            showToast(msg);
+
+            // رسالة نجاح مفصلة
+            let summary = Object.entries(counts)
+                .filter(([,v]) => v > 0)
+                .map(([k,v]) => `${k}: ${v}`)
+                .join('\n');
+            if (summary) {
+                showToast(`✅ تم استيراد:\n${summary}`);
+            } else {
+                showToast(`⚠️ لم يتم استيراد أي بيانات. تأكد من صحة ملف JSON.`);
+            }
         } catch (err) {
             console.error(err);
-            showToast(`❌ فشل الاستيراد: ${err.message}\nراجع وحدة التحكم (F12) للتفاصيل.`);
+            showToast(`❌ خطأ في الاستيراد: ${err.message}\nراجع وحدة التحكم (F12) للتفاصيل.`);
         }
     };
     inp.click();
-}; 
+};
         // Sidebar toggle
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('sidebarToggleBtn');

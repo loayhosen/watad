@@ -1,0 +1,7 @@
+mongodb+srv://wataduser:watad12345@watad.w2jcy9k.mongodb.net/?retryWrites=true&w=majority&appName=watad
+
+
+
+mongodb+srv://wataduser:watad12345@watad.w2jcy9k.mongodb.net/watad_db?retryWrites=true&w=majority&appName=watad
+
+
